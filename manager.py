@@ -91,7 +91,7 @@ class Manager(ControlSurface):
             client = self.osc_server.current_client
             removed = sum(handler.stop_listeners_for_client(client)
                           for handler in self.handlers)
-            self.logger.info("Removed %d listener(s) for client %s" % (removed, str(client)))
+            logger.info("Removed %d listener(s) for client %s" % (removed, str(client)))
             return (removed,)
 
         self.osc_server.add_handler("/live/test", test_callback)
