@@ -38,6 +38,15 @@ class OSCServer:
         self._socket.bind(self._local_addr)
         self._callbacks = {}
 
+        #--------------------------------------------------------------------------------
+        # Address of the client whose message is currently being dispatched. Handlers
+        # that register listeners read this (via `current_client`) to record *who*
+        # subscribed, so property-change events go to that client rather than to a
+        # single hardcoded response port. The Live API is single-threaded and
+        # process_message() is not re-entered, so one slot suffices.
+        #--------------------------------------------------------------------------------
+        self._current_client = None
+
         self.logger = logging.getLogger("abletonosc")
         self.logger.info("Starting OSC server (local %s, response port %d)",
                          str(self._local_addr), self._response_port)
@@ -84,7 +93,18 @@ class OSCServer:
         except BuildError:
             self.logger.error("AbletonOSC: OSC build error: %s" % (traceback.format_exc()))
 
+    @property
+    def current_client(self) -> Tuple[str, int]:
+        """
+        The client whose message is currently being handled, as an (host, port) tuple.
+        Falls back to the default remote address outside of message dispatch.
+        """
+        if self._current_client is None:
+            return self._remote_addr
+        return self._current_client
+
     def process_message(self, message, remote_addr):
+        self._current_client = remote_addr
         if message.address in self._callbacks:
             callback = self._callbacks[message.address]
             rv = callback(message.params)

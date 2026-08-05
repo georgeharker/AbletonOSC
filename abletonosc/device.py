@@ -96,16 +96,18 @@ class DeviceHandler(AbletonOSCHandler):
         
         def device_get_parameter_value_listener(device, params: Tuple[Any] = ()):
 
+            client = self.osc_server.current_client
+
             def property_changed_callback():
                 value = device.parameters[params[2]].value
                 self.logger.info("Property %s changed of %s %s: %s" % ('value', 'device parameter', str(params), value))
-                self.osc_server.send("/live/device/get/parameter/value", (*params, value,))
+                self.osc_server.send("/live/device/get/parameter/value", (*params, value,), remote_addr=client)
 
                 value_string = device.parameters[params[2]].str_for_value(device.parameters[params[2]].value)
                 self.logger.info("Property %s changed of %s %s: %s" % ('value_string', 'device parameter', str(params), value_string))
-                self.osc_server.send("/live/device/get/parameter/value_string", (*params, value_string,))
+                self.osc_server.send("/live/device/get/parameter/value_string", (*params, value_string,), remote_addr=client)
 
-            listener_key = ('device_parameter_value', tuple(params))
+            listener_key = self._listener_key('device_parameter_value', params, client)
             if listener_key in self.listener_functions:
                device_get_parameter_remove_value_listener(device, params)
 
@@ -116,7 +118,7 @@ class DeviceHandler(AbletonOSCHandler):
             property_changed_callback()
 
         def device_get_parameter_remove_value_listener(device, params: Tuple[Any] = ()):
-            listener_key = ('device_parameter_value', tuple(params))
+            listener_key = self._listener_key('device_parameter_value', params)
             if listener_key in self.listener_functions:
                 self.logger.info("Removing listener for %s %s, property %s" % (self.class_identifier, str(params), 'value'))
                 listener_function = self.listener_functions[listener_key]

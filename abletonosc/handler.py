@@ -22,6 +22,43 @@ class AbletonOSCHandler(Component):
         self._clear_listeners()
 
     #--------------------------------------------------------------------------------
+    # Listener bookkeeping
+    #--------------------------------------------------------------------------------
+    def _listener_key(self, prop, params: Optional[Tuple] = (), client = None):
+        """
+        Key identifying one client's subscription to one property.
+
+        Listeners are keyed per-client so that two clients may subscribe to the same
+        property without evicting one another, and so each receives its own updates.
+        `client` defaults to whoever sent the message being handled.
+        """
+        if client is None:
+            client = self.osc_server.current_client
+        return (prop, tuple(params), client)
+
+    def stop_listeners_for_client(self, client) -> int:
+        """
+        Remove every listener registered by `client`. UDP gives us no disconnect
+        signal, so a client that goes away silently would otherwise leave listeners
+        firing into a dead port forever. Returns the number removed.
+        """
+        removed = 0
+        for listener_key in list(self.listener_functions.keys()):
+            if len(listener_key) == 3 and listener_key[2] == client:
+                prop, params, key_client = listener_key
+                target = self.listener_objects.get(listener_key)
+                if target is None:
+                    #--------------------------------------------------------------------------------
+                    # Listeners registered outside _start_listen (device parameters, track
+                    # mixer properties) record no target; drop the entry directly.
+                    #--------------------------------------------------------------------------------
+                    del self.listener_functions[listener_key]
+                else:
+                    self._stop_listen(target, prop, params, key_client)
+                removed += 1
+        return removed
+
+    #--------------------------------------------------------------------------------
     # Generic callbacks
     #--------------------------------------------------------------------------------
     def _call_method(self, target, method, params: Optional[Tuple] = ()):
@@ -58,6 +95,12 @@ class AbletonOSCHandler(Component):
             params:
             getter:
         """
+        #--------------------------------------------------------------------------------
+        # Bind the subscribing client at registration time, so that changes are
+        # delivered to whoever asked for them rather than to a single fixed port.
+        #--------------------------------------------------------------------------------
+        client = self.osc_server.current_client
+
         def property_changed_callback():
             if getter is None:
                 value = getattr(target, prop)
@@ -67,11 +110,11 @@ class AbletonOSCHandler(Component):
                 value = (value,)
             self.logger.info("Property %s changed of %s %s: %s" % (prop, self.class_identifier, str(params), value))
             osc_address = "/live/%s/get/%s" % (self.class_identifier, prop)
-            self.osc_server.send(osc_address, (*params, *value,))
+            self.osc_server.send(osc_address, (*params, *value,), remote_addr=client)
 
-        listener_key = (prop, tuple(params))
+        listener_key = self._listener_key(prop, params, client)
         if listener_key in self.listener_functions:
-            self._stop_listen(target, prop, params)
+            self._stop_listen(target, prop, params, client)
 
         self.logger.info("Adding listener for %s %s, property: %s" % (self.class_identifier, str(params), prop))
         add_listener_function_name = "add_%s_listener" % prop
@@ -84,8 +127,8 @@ class AbletonOSCHandler(Component):
         #--------------------------------------------------------------------------------
         property_changed_callback()
 
-    def _stop_listen(self, target, prop, params: Optional[Tuple[Any]] = ()) -> None:
-        listener_key = (prop, tuple(params))
+    def _stop_listen(self, target, prop, params: Optional[Tuple[Any]] = (), client = None) -> None:
+        listener_key = self._listener_key(prop, params, client)
         if listener_key in self.listener_functions:
             self.logger.info("Removing listener for %s %s, property %s" % (self.class_identifier, str(params), prop))
             listener_function = self.listener_functions[listener_key]
@@ -111,6 +154,13 @@ class AbletonOSCHandler(Component):
         Clears all listener functions, to prevent listeners continuing to report after a reload.
         """
         for listener_key in list(self.listener_functions.keys())[:]:
-            target = self.listener_objects[listener_key]
-            prop, params = listener_key
-            self._stop_listen(target, prop, params)
+            prop, params, client = listener_key
+            target = self.listener_objects.get(listener_key)
+            if target is None:
+                #--------------------------------------------------------------------------------
+                # Listeners registered outside _start_listen (device parameters, track
+                # mixer properties) record no target object; drop the entry directly.
+                #--------------------------------------------------------------------------------
+                del self.listener_functions[listener_key]
+            else:
+                self._stop_listen(target, prop, params, client)

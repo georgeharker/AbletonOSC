@@ -243,13 +243,15 @@ class TrackHandler(AbletonOSCHandler):
 
     def _start_mixer_listen(self, target, prop, params: Optional[Tuple] = ()) -> None:
         parameter_object = getattr(target.mixer_device, prop)
+        client = self.osc_server.current_client
+
         def property_changed_callback():
             value = parameter_object.value
             self.logger.info("Property %s changed of %s %s: %s" % (prop, self.class_identifier, str(params), value))
             osc_address = "/live/%s/get/%s" % (self.class_identifier, prop)
-            self.osc_server.send(osc_address, (*params, value,))
+            self.osc_server.send(osc_address, (*params, value,), remote_addr=client)
 
-        listener_key = (prop, tuple(params))
+        listener_key = self._listener_key(prop, params, client)
         if listener_key in self.listener_functions:
             self._stop_mixer_listen(target, prop, params)
 
@@ -264,7 +266,7 @@ class TrackHandler(AbletonOSCHandler):
 
     def _stop_mixer_listen(self, target, prop, params: Optional[Tuple[Any]] = ()) -> None:
         parameter_object = getattr(target.mixer_device, prop)
-        listener_key = (prop, tuple(params))
+        listener_key = self._listener_key(prop, params)
         if listener_key in self.listener_functions:
             self.logger.info("Removing listener for %s %s, property %s" % (self.class_identifier, str(params), prop))
             listener_function = self.listener_functions[listener_key]
