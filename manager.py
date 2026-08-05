@@ -82,8 +82,20 @@ class Manager(ControlSurface):
             self.log_file_handler.setLevel(self.log_level.upper())
         def show_message_callback(params):
             self.show_message(params[0])
+        def stop_all_listeners_callback(params):
+            #--------------------------------------------------------------------------------
+            # Remove every listener registered by the calling client. UDP gives no
+            # disconnect signal, so a client that exits without doing this leaves its
+            # listeners firing into a closed port until Live reloads.
+            #--------------------------------------------------------------------------------
+            client = self.osc_server.current_client
+            removed = sum(handler.stop_listeners_for_client(client)
+                          for handler in self.handlers)
+            self.logger.info("Removed %d listener(s) for client %s" % (removed, str(client)))
+            return (removed,)
 
         self.osc_server.add_handler("/live/test", test_callback)
+        self.osc_server.add_handler("/live/api/stop_all_listeners", stop_all_listeners_callback)
         self.osc_server.add_handler("/live/api/reload", reload_callback)
         self.osc_server.add_handler("/live/api/get/log_level", get_log_level_callback)
         self.osc_server.add_handler("/live/api/set/log_level", set_log_level_callback)

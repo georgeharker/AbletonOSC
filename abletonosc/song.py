@@ -267,21 +267,44 @@ class SongHandler(AbletonOSCHandler):
         # Listener for /live/song/get/beat
         #--------------------------------------------------------------------------------
         self.last_song_time = -1.0
-        
+
+        #--------------------------------------------------------------------------------
+        # The beat listener is a single bound method shared by every subscriber, so
+        # unlike per-property listeners it cannot close over one client. Track the
+        # subscribed clients instead and fan out in current_song_time_changed(),
+        # registering with Live only while at least one client is listening.
+        #--------------------------------------------------------------------------------
+        self._beat_clients = set()
+
         def stop_beat_listener(params: Tuple[Any] = ()):
-            try:
-                self.song.remove_current_song_time_listener(self.current_song_time_changed)
-                self.logger.info("Removing beat listener")
-            except:
-                pass
+            self._beat_clients.discard(self.osc_server.current_client)
+            if not self._beat_clients:
+                self._remove_beat_listener()
 
         def start_beat_listener(params: Tuple[Any] = ()):
-            stop_beat_listener()
-            self.logger.info("Adding beat listener")
-            self.song.add_current_song_time_listener(self.current_song_time_changed)
+            if not self._beat_clients:
+                self.logger.info("Adding beat listener")
+                self.song.add_current_song_time_listener(self.current_song_time_changed)
+            self._beat_clients.add(self.osc_server.current_client)
 
         self.osc_server.add_handler("/live/song/start_listen/beat", start_beat_listener)
         self.osc_server.add_handler("/live/song/stop_listen/beat", stop_beat_listener)
+
+    def _remove_beat_listener(self):
+        try:
+            self.song.remove_current_song_time_listener(self.current_song_time_changed)
+            self.logger.info("Removing beat listener")
+        except:
+            pass
+
+    def stop_listeners_for_client(self, client) -> int:
+        removed = super().stop_listeners_for_client(client)
+        if client in self._beat_clients:
+            self._beat_clients.discard(client)
+            if not self._beat_clients:
+                self._remove_beat_listener()
+            removed += 1
+        return removed
 
     def current_song_time_changed(self):
         #--------------------------------------------------------------------------------
@@ -289,12 +312,12 @@ class SongHandler(AbletonOSCHandler):
         #--------------------------------------------------------------------------------
         if (self.song.current_song_time < self.last_song_time) or \
                 (int(self.song.current_song_time) > int(self.last_song_time)):
-            self.osc_server.send("/live/song/get/beat", (int(self.song.current_song_time),))
+            beat = (int(self.song.current_song_time),)
+            for client in list(self._beat_clients):
+                self.osc_server.send("/live/song/get/beat", beat, remote_addr=client)
         self.last_song_time = self.song.current_song_time
 
     def clear_api(self):
         super().clear_api()
-        try:
-            self.song.remove_current_song_time_listener(self.current_song_time_changed)
-        except:
-            pass
+        self._beat_clients.clear()
+        self._remove_beat_listener()
