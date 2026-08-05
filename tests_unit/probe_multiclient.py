@@ -99,10 +99,23 @@ def main():
         got_initial = [p.name for p in (a, b) if p.received]
         print("  initial value received by: %s\n" % (got_initial or "neither"))
 
+        #--------------------------------------------------------------------------------
+        # Pick a target that differs from the current value -- Live only fires the
+        # listener on an actual change, so re-setting the existing value looks
+        # identical to a broken listener.
+        #--------------------------------------------------------------------------------
+        current = None
+        for probe in (a, b):
+            for address, params in probe.received:
+                if address == "/live/track/get/volume" and len(params) >= 2:
+                    current = float(params[1])
+        target = 0.8 if (current is None or current < 0.5) else 0.2
+
         a.received.clear(); b.received.clear()
 
-        print("Client A changes the volume; both should see it...")
-        a.send("/live/track/set/volume", track, 0.42)
+        print("Client A sets volume %s -> %s; both should see it..." % (
+            "?" if current is None else round(current, 3), target))
+        a.send("/live/track/set/volume", track, target)
         time.sleep(0.8)
 
         a_saw = [r for r in a.received if r[0] == "/live/track/get/volume"]
