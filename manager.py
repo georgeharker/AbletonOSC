@@ -97,6 +97,8 @@ class Manager(ControlSurface):
                 abletonosc.ClipSlotHandler(self),
                 abletonosc.TrackHandler(self),
                 abletonosc.DeviceHandler(self),
+                abletonosc.BrowserHandler(self),
+                abletonosc.MasterHandler(self),
                 abletonosc.ViewHandler(self),
                 abletonosc.SceneHandler(self),
                 abletonosc.MidiMapHandler(self),
@@ -124,6 +126,8 @@ class Manager(ControlSurface):
             importlib.reload(abletonosc.clip)
             importlib.reload(abletonosc.clip_slot)
             importlib.reload(abletonosc.device)
+            importlib.reload(abletonosc.browser)
+            importlib.reload(abletonosc.master)
             importlib.reload(abletonosc.handler)
             importlib.reload(abletonosc.osc_server)
             importlib.reload(abletonosc.scene)
