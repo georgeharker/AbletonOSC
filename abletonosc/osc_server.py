@@ -91,8 +91,7 @@ class OSCServer:
 
             if rv is not None:
                 assert isinstance(rv, tuple)
-                remote_hostname, _ = remote_addr
-                response_addr = (remote_hostname, self._response_port)
+                response_addr = remote_addr
                 self.send(address=message.address,
                           params=rv,
                           remote_addr=response_addr)
@@ -116,8 +115,7 @@ class OSCServer:
                         continue
                     if rv is not None:
                         assert isinstance(rv, tuple)
-                        remote_hostname, _ = remote_addr
-                        response_addr = (remote_hostname, self._response_port)
+                        response_addr = remote_addr
                         self.send(address=callback_address,
                                   params=rv,
                                   remote_addr=response_addr)
